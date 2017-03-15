@@ -10,8 +10,7 @@ URL: %{url_prefix}/%{name}
 BuildRequires: nethserver-devtools
 
 AutoReq: no
-Requires: owncloud >= 7.0.13
-Requires: nethserver-directory
+Requires: owncloud = 7.0.13
 Requires: php-ldap, php-gd, php-pdo, php-mysql, php-pear, php-pear-MDB2, php-pear-MDB2-Driver-mysqli, php-pear-Net-Curl
 Requires: nethserver-httpd, nethserver-mysql
 
@@ -29,21 +28,21 @@ NethServer Owncloud configuration
 perl createlinks
 
 %install
-rm -rf $RPM_BUILD_ROOT
+rm -rf %{buildroot}
 
-(cd root   ; find . -depth -print | cpio -dump $RPM_BUILD_ROOT)
+(cd root   ; find . -depth -print | cpio -dump %{buildroot})
 
 %{genfilelist} \
-	--dir /var/www/html/owncloud/config 'attr(775, apache, apache)' \
 	--dir /var/www/html/owncloud 'attr(750, root, apache)' \
 	--dir /var/www/html/owncloud/apps 'attr(770, apache, apache)' \
 	--dir /var/www/html/owncloud/apps/user_ldap 'attr(750, root, apache)' \
 	--dir /var/www/html/owncloud/apps/user_ldap/command 'attr(750, root, apache)' \
-    $RPM_BUILD_ROOT > e-smith-%{version}-filelist
+    %{buildroot} > e-smith-%{version}-filelist
 echo "%doc COPYING"          >> e-smith-%{version}-filelist
 
 %files -f e-smith-%{version}-filelist
 %defattr(-,root,root)
+%dir %{_nseventsdir}/%{name}-update
 
 %changelog
 * Tue Mar 29 2016 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 1.1.8-1

@@ -26,7 +26,6 @@ use Errno;
 use esmith::util;
 use esmith::ConfigDB;
 use esmith::NetworksDB;
-use NethServer::Directory;
 use NethServer::Password;
 
 my $db = esmith::ConfigDB->open_ro();
@@ -73,8 +72,6 @@ if ($res == 0) {
     system("/usr/bin/php /var/www/html/owncloud/config/fix_oc_config.php $filename $password $trustedDomains");
 }
 
-# Register owncloud service account in LDAP:
-NethServer::Directory->new()->configServiceAccount('owncloud', NethServer::Directory::FIELDS_READ) || die("Failed to register owncloud service account");
 
 # initialize grants mysql owncloud database
 system('/usr/bin/mysql --defaults-file=/root/.my.cnf -e "CREATE DATABASE IF NOT EXISTS owncloud;"');
