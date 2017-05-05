@@ -1,45 +1,71 @@
-#!/bin/bash
+#!/usr/bin/perl
 
-res=`/usr/bin/mysql --defaults-file=/root/.my.cnf -e "select count(*) from information_schema.tables where table_type = 'BASE TABLE' and table_schema = 'owncloud'" | tail -n1`;
+use strict;
+use NethServer::SSSD;
 
-if [[ $res == '0' ]]; then
-    url=`/sbin/e-smith/config get SystemName`.`/sbin/e-smith/config get DomainName`
-    curl -s -k https://$url/owncloud/ > /dev/null
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ app:enable user_ldap
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:create-empty-config
-    sed -i "$ d" /var/www/html/owncloud/config/config.php
-    sed -i "/forcessl/d" /var/www/html/owncloud/config/config.php
-    sed -i "/check_for_working_webdav/d" /var/www/html/owncloud/config/config.php
-    sed -i "/updatechecker/d" /var/www/html/owncloud/config/config.php
-    echo "  'forcessl' => true," >> /var/www/html/owncloud/config/config.php
-    echo "  'check_for_working_webdav' => false," >> /var/www/html/owncloud/config/config.php
-    echo "  'updatechecker' => false," >> /var/www/html/owncloud/config/config.php
-    echo ");" >> /var/www/html/owncloud/config/config.php
-else
-    # Fix upgrade from version 5.x: https://github.com/owncloud/core/issues/6152#issuecomment-30236917
-    /usr/bin/mysql --defaults-file=/root/.my.cnf owncloud -e "DELETE FROM lucene_status WHERE fileid IN (SELECT fileid FROM (SELECT fileid FROM lucene_status GROUP BY fileid HAVING count(status) > 1) AS mysqlerr1093hack)";
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ upgrade
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapTLS "0"
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapCacheTTL "0"
-fi
+sub OCC
+{
+    my $params = join(" ", @_);
+    system("php -d \"magic_quotes_gpc = Off\" /var/www/html/owncloud/occ  $params");
+}
 
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapAgentPassword `cat /var/lib/nethserver/secrets/owncloud`
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapBackupPort "389"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapBase "dc=directory,dc=nh"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapBaseGroups "dc=directory,dc=nh"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapBaseUsers "dc=directory,dc=nh"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapConfigurationActive "1"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapUserDisplayName "cn"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapAgentName "cn=owncloud,dc=directory,dc=nh"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapEmailAttribute "mail"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapExpertUsernameAttr "uid"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapGroupDisplayName "cn"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapGroupFilter "(&(objectClass=posixGroup)(memberUid=*))"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapGroupMemberAssocAttr "memberUid"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapHost "localhost:389"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapLoginFilter "uid=%uid"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapPort "389"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapTLS "0"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapCacheTTL "0"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:set-config "" ldapUserFilter "(&(objectClass=person)(givenName=*))"
-php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ app:disable updater
+
+# Update user authentication
+
+my $sssd = new NethServer::SSSD();
+my $quotedBindPass = $sssd->bindPassword(); $quotedBindPass =~ s/\'/\\'/g;
+if ($sssd->isLdap()) {
+    OCC "ldap:set-config '' ldapHost '" . $sssd->ldapURI() . "'";
+    OCC "ldap:set-config '' ldapPort ".$sssd->port();
+    OCC "ldap:set-config '' ldapAgentName '" . $sssd->bindDN() . "'";
+    OCC "ldap:set-config '' ldapAgentPassword '$quotedBindPass'";
+    OCC "ldap:set-config '' ldapBase ".$sssd->baseDN();
+    OCC "ldap:set-config '' ldapBaseGroups ".$sssd->groupDN();
+    OCC "ldap:set-config '' ldapBaseUsers ".$sssd->userDN();
+
+    OCC "ldap:set-config '' ldapGroupDisplayName cn";
+    OCC "ldap:set-config '' ldapGroupFilter '(&(|(objectclass=posixGroup)))'";
+    OCC "ldap:set-config '' ldapGroupFilterObjectclass posixGroup";
+    OCC "ldap:set-config '' ldapGroupMemberAssocAttr memberUid";
+    OCC "ldap:set-config '' ldapLoginFilter '(&(|(objectclass=inetOrgPerson))(|(uid=%uid)(|(mail=%uid))))'";
+    OCC "ldap:set-config '' ldapLoginFilterEmail 1";
+    OCC "ldap:set-config '' ldapLoginFilterMode 0";
+    OCC "ldap:set-config '' ldapLoginFilterUsername 1";
+    OCC "ldap:set-config '' ldapUserDisplayName cn";
+    OCC "ldap:set-config '' ldapUserDisplayName2 uid";
+    OCC "ldap:set-config '' ldapUserFilter '(|(objectclass=inetOrgPerson))'";
+    OCC "ldap:set-config '' ldapUserFilterObjectclass inetOrgPerson";
+    OCC "ldap:set-config '' useMemberOfToDetectMembership 0";
+    OCC "ldap:set-config '' ldapConfigurationActive 1";
+    OCC "ldap:set-config '' turnOffCertCheck 1";
+    if($sssd->startTls()) {
+        OCC "ldap:set-config '' ldapTLS 1"; # enable starttls on remote ldap providers
+    }
+} elsif ($sssd->isAD()) {
+    OCC "ldap:set-config '' ldapHost '" . $sssd->ldapURI() . "'";
+    OCC "ldap:set-config '' ldapPort ".$sssd->port();
+    OCC "ldap:set-config '' ldapAgentName '" . $sssd->bindDN() . "'";
+    OCC "ldap:set-config '' ldapAgentPassword '$quotedBindPass'";
+    OCC "ldap:set-config '' ldapBase ".$sssd->baseDN();
+    OCC "ldap:set-config '' ldapBaseGroups ".$sssd->groupDN();
+    OCC "ldap:set-config '' ldapBaseUsers ".$sssd->userDN();
+
+    OCC "ldap:set-config '' ldapGroupDisplayName cn";
+    OCC "ldap:set-config '' ldapGroupFilter ' (&(objectClass=group)(groupType:1.2.840.113556.1.4.803:=2))'";
+    OCC "ldap:set-config '' ldapGroupFilterObjectclass group";
+    OCC "ldap:set-config '' ldapGroupMemberAssocAttr member";
+    OCC "ldap:set-config '' ldapLoginFilter '(&(&(|(objectclass=person)))(|(samaccountname=%uid)(userPrincipalName=%uid)))'";
+    OCC "ldap:set-config '' ldapLoginFilterMode 0";
+    OCC "ldap:set-config '' ldapLoginFilterUsername 1";
+    OCC "ldap:set-config '' ldapUserDisplayName displayName";
+    OCC "ldap:set-config '' ldapUserDisplayName2 samaccountname";
+    OCC "ldap:set-config '' ldapUserFilter '(&(|(objectclass=person)))'";
+    OCC "ldap:set-config '' ldapUserFilterObjectclass person";
+    OCC "ldap:set-config '' turnOffCertCheck 1";
+    OCC "ldap:set-config '' useMemberOfToDetectMembership 0";
+    OCC "ldap:set-config '' ldapConfigurationActive 1";
+    OCC "ldap:set-config '' ldapTLS 0"; # always disable starttls, AD does not support it
+} else {
+    # SSSD provider not configured, nothing to do
+    exit 0;
+}
