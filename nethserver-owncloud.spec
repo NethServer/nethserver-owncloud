@@ -1,6 +1,6 @@
 Summary: NethServer Owncloud configuration
 Name: nethserver-owncloud
-Version: 2.0.0
+Version: 2.0.1
 Release: 1%{?dist}
 License: GPL
 Source: %{name}-%{version}.tar.gz
@@ -45,6 +45,9 @@ echo "%doc COPYING"          >> e-smith-%{version}-filelist
 %dir %{_nseventsdir}/%{name}-update
 
 %changelog
+* Wed May 10 2017 Giacomo Sanchietti <giacomo.sanchietti@nethesis.it> - 2.0.1-1
+- Upgrade from NS 6 via backup and restore - NethServer/dev#5234
+
 * Thu Apr 20 2017 Davide Principi <davide.principi@nethesis.it> - 2.0.0-1
 - Build for ns7, to help upgrades from ns6
 - Upgrade from NS 6 via backup and restore - NethServer/dev#5234
