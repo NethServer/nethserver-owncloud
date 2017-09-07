@@ -19,6 +19,11 @@
 # along with NethServer.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+if [ -f /var/run/.nethserver-fixnetwork ]; then
+   echo "[WARNING]: skipping owncloud configuration until network is fixed"
+   exit 0
+fi
+
 # initialize grants mysql owncloud database
 password=`cat /var/lib/nethserver/secrets/ownuser`
 /usr/bin/mysql --defaults-file=/root/.my.cnf -e "CREATE DATABASE IF NOT EXISTS owncloud;"
@@ -31,8 +36,8 @@ if [[ $res == '0' ]]; then
     url=`/sbin/e-smith/config get SystemName`.`/sbin/e-smith/config get DomainName`
     curl -L -s -k https://$url/owncloud/ > /dev/null
     if [ ! -f /var/www/html/owncloud/config/config.php ]; then
-        echo "[ERROR] DB initialization failed: curl -L -s -k https://$url/owncloud/!"
-        exit 1
+        echo "[WARNING] DB initialization failed. Execute: curl -L -s -k https://$url/owncloud/"
+        exit 0
     fi
     php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ app:enable user_ldap
     php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:create-empty-config

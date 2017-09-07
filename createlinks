@@ -42,4 +42,11 @@ event_services("nethserver-owncloud-update", qw(
   httpd restart
 ));
 
+#
+# Event interface-update
+#
+event_actions("interface-update", qw(
+  nethserver-owncloud-conf-db 95
+  nethserver-owncloud-conf-ldap 95
+));
 
