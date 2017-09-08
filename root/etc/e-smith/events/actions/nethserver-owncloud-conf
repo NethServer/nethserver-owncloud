@@ -72,31 +72,3 @@ if ($res == 0) {
     system("/usr/bin/php /var/www/html/owncloud/config/fix_oc_config.php $filename $password $trustedDomains");
 }
 
-
-# initialize grants mysql owncloud database
-system('/usr/bin/mysql --defaults-file=/root/.my.cnf -e "CREATE DATABASE IF NOT EXISTS owncloud;"');
-system('/usr/bin/mysql --defaults-file=/root/.my.cnf -e "grant all on owncloud.* to \'ownuser\'@\'localhost\' identified by \''.$password.'\'"');
-system('/usr/bin/mysql --defaults-file=/root/.my.cnf -e "FLUSH PRIVILEGES"');
-
-res=`/usr/bin/mysql --defaults-file=/root/.my.cnf -e "select count(*) from information_schema.tables where table_type = 'BASE TABLE' and table_schema = 'owncloud'" | tail -n1`;
-
-if [[ $res == '0' ]]; then
-    url=`/sbin/e-smith/config get SystemName`.`/sbin/e-smith/config get DomainName`
-    curl -s -k https://$url/owncloud/ > /dev/null
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ app:enable user_ldap
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:create-empty-config
-    sed -i "$ d" /var/www/html/owncloud/config/config.php
-    sed -i "/forcessl/d" /var/www/html/owncloud/config/config.php
-    sed -i "/check_for_working_webdav/d" /var/www/html/owncloud/config/config.php
-    sed -i "/updatechecker/d" /var/www/html/owncloud/config/config.php
-    echo "  'forcessl' => true," >> /var/www/html/owncloud/config/config.php
-    echo "  'check_for_working_webdav' => false," >> /var/www/html/owncloud/config/config.php
-    echo "  'updatechecker' => false," >> /var/www/html/owncloud/config/config.php
-    echo ");" >> /var/www/html/owncloud/config/config.php
-else
-    # Fix upgrade from version 5.x: https://github.com/owncloud/core/issues/6152#issuecomment-30236917
-    /usr/bin/mysql --defaults-file=/root/.my.cnf owncloud -e "DELETE FROM lucene_status WHERE fileid IN (SELECT fileid FROM (SELECT fileid FROM lucene_status GROUP BY fileid HAVING count(status) > 1) AS mysqlerr1093hack)";
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ upgrade
-fi
-
-

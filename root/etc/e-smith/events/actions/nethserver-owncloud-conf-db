@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# Copyright (C) 2017 Nethesis S.r.l.
+# http://www.nethserver.org
+# 
+# This script is part of NethServer.
+# 
+# NethServer is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License,
+# or any later version.
+# 
+# NethServer is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with NethServer.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+if [ -f /var/run/.nethserver-fixnetwork ]; then
+   echo "[WARNING]: skipping owncloud configuration until network is fixed"
+   exit 0
+fi
+
+# initialize grants mysql owncloud database
+password=`cat /var/lib/nethserver/secrets/ownuser`
+/usr/bin/mysql --defaults-file=/root/.my.cnf -e "CREATE DATABASE IF NOT EXISTS owncloud;"
+/usr/bin/mysql --defaults-file=/root/.my.cnf -e "grant all on owncloud.* to 'ownuser'@'localhost' identified by '$password'"
+/usr/bin/mysql --defaults-file=/root/.my.cnf -e "FLUSH PRIVILEGES";
+
+res=`/usr/bin/mysql --defaults-file=/root/.my.cnf -e "select count(*) from information_schema.tables where table_type = 'BASE TABLE' and table_schema = 'owncloud'" | tail -n1`;
+
+if [[ $res == '0' ]]; then
+    url=`/sbin/e-smith/config get SystemName`.`/sbin/e-smith/config get DomainName`
+    curl -L -s -k https://$url/owncloud/ > /dev/null
+    if [ ! -f /var/www/html/owncloud/config/config.php ]; then
+        echo "[WARNING] DB initialization failed. Execute: curl -L -s -k https://$url/owncloud/"
+        exit 0
+    fi
+    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ app:enable user_ldap
+    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ ldap:create-empty-config
+    sed -i "$ d" /var/www/html/owncloud/config/config.php
+    sed -i "/forcessl/d" /var/www/html/owncloud/config/config.php
+    sed -i "/check_for_working_webdav/d" /var/www/html/owncloud/config/config.php
+    sed -i "/updatechecker/d" /var/www/html/owncloud/config/config.php
+    echo "  'forcessl' => true," >> /var/www/html/owncloud/config/config.php
+    echo "  'check_for_working_webdav' => false," >> /var/www/html/owncloud/config/config.php
+    echo "  'updatechecker' => false," >> /var/www/html/owncloud/config/config.php
+    echo ");" >> /var/www/html/owncloud/config/config.php
+    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ app:disable updater
+else
+    # Fix upgrade from version 5.x: https://github.com/owncloud/core/issues/6152#issuecomment-30236917
+    /usr/bin/mysql --defaults-file=/root/.my.cnf owncloud -e "DELETE FROM lucene_status WHERE fileid IN (SELECT fileid FROM (SELECT fileid FROM lucene_status GROUP BY fileid HAVING count(status) > 1) AS mysqlerr1093hack)";
+    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ upgrade
+fi
+
+

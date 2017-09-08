@@ -12,6 +12,12 @@ sub OCC
 
 # Update user authentication
 
+if (-f "/var/run/.nethserver-fixnetwork") {
+   print "[WARNING]: skipping owncloud configuration until network is fixed\n";
+   exit 0;
+}
+
+
 my $sssd = new NethServer::SSSD();
 my $quotedBindPass = $sssd->bindPassword(); $quotedBindPass =~ s/\'/\\'/g;
 if ($sssd->isLdap()) {
