@@ -53,7 +53,7 @@ if [[ $res == '0' ]]; then
 else
     # Fix upgrade from version 5.x: https://github.com/owncloud/core/issues/6152#issuecomment-30236917
     /usr/bin/mysql --defaults-file=/root/.my.cnf owncloud -e "DELETE FROM lucene_status WHERE fileid IN (SELECT fileid FROM (SELECT fileid FROM lucene_status GROUP BY fileid HAVING count(status) > 1) AS mysqlerr1093hack)";
-    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ upgrade
+    php -d "magic_quotes_gpc = Off" /var/www/html/owncloud/occ upgrade || :
 fi
 
 
